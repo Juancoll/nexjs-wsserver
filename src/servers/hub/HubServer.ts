@@ -188,7 +188,9 @@ export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
             if (!selection) {
                 selectedClients.push(client.socket);
             } else {
-                const user = this.wss.auth.authInfos.get(client.socket.id).user;
+                let user = undefined;
+                if (this.wss.auth && this.wss.auth.authInfos)
+                    user = this.wss.auth.authInfos.get(client.socket.id).user;
                 const userCredentials = client.credentials;
                 const isValid = await selection(descriptor.instance, user, userCredentials, serverCredentials);
                 if (isValid) {
@@ -234,7 +236,9 @@ export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
         }
         if (options.validation) {
             try {
-                const user = this.wss.auth.authInfos.get(clientId).user as any;
+                let user = undefined;
+                if (this.wss.auth && this.wss.auth.authInfos)
+                    user = this.wss.auth.authInfos.get(clientId).user as any;
                 const isValid = await options.validation(instance, user, credentials);
                 if (!isValid) { return WSErrorCode.ws_hub_auth_credentials_error; }
             } catch (err) {

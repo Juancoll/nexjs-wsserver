@@ -188,7 +188,9 @@ export class RestServer<TUser, TToken> extends ModuleBase<TUser, TToken>  {
         }
         if (options.validation) {
             try {
-                const user = this.wss.auth.authInfos.get(clientId).user as any;
+                let user = undefined;
+                if (this.wss.auth && this.wss.auth.authInfos)
+                    user = this.wss.auth.authInfos.get(clientId).user as any;
                 const isValid = await options.validation(instance, user, credentials);
                 if (!isValid) { return WSErrorCode.ws_rest_auth_credentials_error; }
             } catch (err) {
