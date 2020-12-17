@@ -59,13 +59,26 @@ export class Reflection {
         };
 
     }
-    public static extractServiceNameFromInstance(instance: any): string {
-        if (!instance.name) {
-            throw new Error('object doesn\'t contains service:strin property. define service in decorator.');
+    public static extractServicePropertyFromInstance(instance: any): string {
+        if (!instance.service) {
+            throw new Error('object doesn\'t contains service: string property. define service in decorator.');
         }
-        if (typeof instance.name != 'string') {
+        if (typeof instance.service != 'string') {
             throw new Error('service property must be string');
         }
-        return instance.name;
+        return instance.service;
+    }
+    public static extractIsAuthPropertyFromInstance(instance: any): boolean {
+        if (instance.isAuth && typeof instance.isAuth != 'boolean') {
+            throw new Error('isAuth property must be boolean');
+        }
+        return instance.isAuth || false;
+    }
+
+    public static extractRolesPropertyFromInstance(instance: any): string[] {
+        if (instance.roles && Array.isArray(instance.roles) == false) {
+            throw new Error('roles property must be array[]');
+        }
+        return instance.roles
     }
 }

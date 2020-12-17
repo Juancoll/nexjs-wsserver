@@ -19,7 +19,7 @@ import { IRestMethodDescriptor } from './types/IRestMethodDescriptor';
 import { IWSError } from '../../types/IWSError';
 import { IRestResponse } from './messages/IRestResponse';
 
-interface RequestEventArgs { client: ISocketClient; service: string; method: string; data: any; credentials: any; result?: any; error?: IWSError; }
+interface RequestEventArgs { client: ISocketClient; service: string; method: string; data: any; result?: any; error?: IWSError; }
 
 export class RestServer<TUser, TToken> extends ModuleBase<TUser, TToken>  {
 
@@ -40,14 +40,13 @@ export class RestServer<TUser, TToken> extends ModuleBase<TUser, TToken>  {
             const data = req.data;
             const service = req.service;
             const method = req.method;
-            const credentials = req.credentials;
 
             if (!this._services.exists(service, method)) {
                 const error = {
                     code: WSErrorCode.ws_rest_method_error,
                     message: `service '${service}' or method '${method}' not found.`,
                 };
-                this.onRequest.dispatch({ client, service, method, credentials, data, error });
+                this.onRequest.dispatch({ client, service, method, data, error });
                 throw error;
             } else {
                 const descriptor = this._services.get(req);
@@ -55,14 +54,13 @@ export class RestServer<TUser, TToken> extends ModuleBase<TUser, TToken>  {
                     client.id,
                     descriptor.metadata.target,
                     descriptor.options,
-                    credentials,
                 );
                 if (code != WSErrorCode.none) {
                     const error = {
                         code,
                         message: `unauthorized`,
                     };
-                    this.onRequest.dispatch({ client, service, method, credentials, data, error });
+                    this.onRequest.dispatch({ client, service, method, data, error });
                     throw error;
                 } else {
                     try {
@@ -75,14 +73,14 @@ export class RestServer<TUser, TToken> extends ModuleBase<TUser, TToken>  {
                         if (Reflection.isPromise(result)) {
                             result = await result;
                         }
-                        this.onRequest.dispatch({ client, service, method, credentials, data, result });
+                        this.onRequest.dispatch({ client, service, method, data, result });
                         return result;
                     } catch (err) {
                         const error = {
                             code: WSErrorCode.ws_rest_method_error,
                             message: err.message,
                         };
-                        this.onRequest.dispatch({ client, service, method, credentials, data, error });
+                        this.onRequest.dispatch({ client, service, method, data, error });
                         throw error;
                     }
                 }
@@ -103,7 +101,15 @@ export class RestServer<TUser, TToken> extends ModuleBase<TUser, TToken>  {
 
                 const service = options.service
                     ? options.service
-                    : Reflection.extractServiceNameFromInstance(instance);
+                    : Reflection.extractServicePropertyFromInstance(instance);
+
+                options.isAuth = options.isAuth
+                    ? options.isAuth
+                    : Reflection.extractIsAuthPropertyFromInstance(instance);
+
+                options.roles = options.roles
+                    ? options.roles
+                    : Reflection.extractRolesPropertyFromInstance(instance);
 
                 const method = propertyKey;
                 const metadata = Reflection.getMethodMetadata(instance, method);
@@ -142,7 +148,6 @@ export class RestServer<TUser, TToken> extends ModuleBase<TUser, TToken>  {
                                 case 'address': args.push(client.address); break;
                                 case 'url': args.push(client.url); break;
                                 case 'origin': args.push(client.origin); break;
-                                case 'credentials': args.push(request.credentials); break;
                                 default: throw new Error(`Decorator @Context('${param.inject.name}') not implemented`);
                             }
                         }
@@ -173,7 +178,6 @@ export class RestServer<TUser, TToken> extends ModuleBase<TUser, TToken>  {
         clientId: string,
         instance: any,
         options: IDecoratorOptionsBase,
-        credentials: any,
     ): Promise<WSErrorCode> {
         if (options.isAuth) {
             if (!this.wss.auth.authInfos.exists(clientId)) { return WSErrorCode.ws_rest_auth_required; }
@@ -184,17 +188,6 @@ export class RestServer<TUser, TToken> extends ModuleBase<TUser, TToken>  {
                 if (!user.roles.some((role: string) => options.roles.indexOf(role) != -1)) {
                     return WSErrorCode.ws_rest_auth_invalid_role;
                 }
-            }
-        }
-        if (options.validation) {
-            try {
-                let user = undefined;
-                if (this.wss.auth && this.wss.auth.authInfos)
-                    user = this.wss.auth.authInfos.get(clientId).user as any;
-                const isValid = await options.validation(instance, user, credentials);
-                if (!isValid) { return WSErrorCode.ws_rest_auth_credentials_error; }
-            } catch (err) {
-                return WSErrorCode.ws_rest_auth_credentials_error;
             }
         }
         return WSErrorCode.none;

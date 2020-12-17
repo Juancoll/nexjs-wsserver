@@ -21,10 +21,8 @@ export * from './servers/hub/HubDecorator';
 
 export * from './servers/hub/HubServer';
 export * from './servers/hub/events/HubEvent';
-export * from './servers/hub/events/HubEventCredentials';
-export * from './servers/hub/events/HubEventCredentialsData';
+export * from './servers/hub/events/HubEventSelector';
+export * from './servers/hub/events/HubEventSelectorData';
 export * from './servers/hub/events/HubEventData';
 
 export * from './servers/rest/RestServer';
-
-export * from './interfaces/IServiceName';

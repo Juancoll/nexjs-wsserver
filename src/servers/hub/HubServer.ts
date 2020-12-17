@@ -1,12 +1,13 @@
 import 'reflect-metadata';
+import { SimpleEventDispatcher } from 'strongly-typed-events';
 
 import { IDecoratorOptionsBase } from '../../decorators/IDecoratorOptionsBase';
 import { WSErrorCode } from '../../types/WSErrorCode';
 import { RestProtocolServer } from '../../base/rest/RestProtocolServer';
 import { ISocketServer } from '../../base/sockets/ISocketServer';
 import { ISocketClient } from '../../base/sockets/ISocketClient';
-import { Logger } from '../../types/Logger';
 import { Reflection } from '../../types/Reflection';
+import { IWSError } from '../../types/IWSError';
 
 import { WSServer } from '../../WSServer';
 import { ModuleBase } from '../ModuleBase';
@@ -14,9 +15,8 @@ import { ModuleBase } from '../ModuleBase';
 import { IHubDecoratorOptions, hubDecoratorKey } from './HubDecorator';
 import { IHubRequest } from './messages/IHubRequest';
 import { HubServiceCollection } from './types/HubServiceCollection';
-import { SimpleEventDispatcher } from 'strongly-typed-events';
-import { IWSError } from '../../types/IWSError';
 import { IHubEventDescriptor } from './types/IHubEventDescriptor';
+import { HubEventType } from './types/HubEventType';
 import { IHubResponse } from './messages/IHubResponse';
 import { IHubEventMessage } from './messages/IHubEventMessage';
 
@@ -70,9 +70,19 @@ export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
         this.getEventDispatcherProperties(instance).forEach(propertyKey => {
             const options: IHubDecoratorOptions = Reflect.getMetadata(hubDecoratorKey, instance, propertyKey);
             if (options) {
+
                 const service = options.service
                     ? options.service
-                    : Reflection.extractServiceNameFromInstance(instance);
+                    : Reflection.extractServicePropertyFromInstance(instance);
+
+                options.isAuth = options.isAuth
+                    ? options.isAuth
+                    : Reflection.extractIsAuthPropertyFromInstance(instance);
+
+                options.roles = options.roles
+                    ? options.roles
+                    : Reflection.extractRolesPropertyFromInstance(instance);
+
                 const event = propertyKey;
 
                 if (this._services.exists(service, event)) {
@@ -83,19 +93,19 @@ export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
                 this.onRegister.dispatch(descriptor);
 
                 switch (instance[event]._type) {
-                    case 'HubEvent':
+                    case HubEventType.HubEvent:
                         instance[event]
                             .on(async () => await this.publish(service, event, null, null));
                         break;
-                    case 'HubEventCredentials':
+                    case HubEventType.HubEventSelector:
                         instance[event]
                             .on(async (credentials: any) => await this.publish(service, event, null, credentials));
                         break;
-                    case 'HubEventData':
+                    case HubEventType.HubEventData:
                         instance[event]
                             .on(async (data: any) => await this.publish(service, event, data, null));
                         break;
-                    case 'HubEventCredentialsData':
+                    case HubEventType.HubEventSelectorData:
                         instance[event]
                             .on(async (credentials: any, data: any) => await this.publish(service, event, data, credentials));
                         break;
@@ -110,10 +120,10 @@ export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
         const props: string[] = Object.getOwnPropertyNames(instance);
 
         return props.sort().filter((name) => instance[name].constructor && instance[name]._type && (
-            instance[name]._type == 'HubEvent' ||
-            instance[name]._type == 'HubEventData' ||
-            instance[name]._type == 'HubEventCredentials' ||
-            instance[name]._type == 'HubEventCredentialsData'
+            instance[name]._type == HubEventType.HubEvent ||
+            instance[name]._type == HubEventType.HubEventData ||
+            instance[name]._type == HubEventType.HubEventSelector ||
+            instance[name]._type == HubEventType.HubEventSelectorData
         ));
     }
     private async subscribe(client: ISocketClient, req: IHubRequest) {
@@ -180,19 +190,19 @@ export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
     }
     private async publish(service: string, event: string, data: any, serverCredentials: any) {
         const descriptor = this._services.get(service, event);
-        const selection = descriptor.options.selection;
+        const select = descriptor.options.select;
         const clients = descriptor.subscriptions;
         const selectedClients: ISocketClient[] = [];
 
         for (const client of clients) {
-            if (!selection) {
+            if (!select) {
                 selectedClients.push(client.socket);
             } else {
                 let user = undefined;
-                if (this.wss.auth && this.wss.auth.authInfos)
+                if (this.wss.auth && this.wss.auth.authInfos && this.wss.auth.authInfos.exists(client.socket.id))
                     user = this.wss.auth.authInfos.get(client.socket.id).user;
                 const userCredentials = client.credentials;
-                const isValid = await selection(descriptor.instance, user, userCredentials, serverCredentials);
+                const isValid = await select(descriptor.instance, user, userCredentials, serverCredentials);
                 if (isValid) {
                     selectedClients.push(client.socket);
                 }
@@ -220,7 +230,7 @@ export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
     protected async isValid(
         clientId: string,
         instance: any,
-        options: IDecoratorOptionsBase,
+        options: IHubDecoratorOptions,
         credentials: any,
     ): Promise<WSErrorCode> {
         if (options.isAuth) {
@@ -234,12 +244,13 @@ export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
                 }
             }
         }
-        if (options.validation) {
+        if (options.validate) {
             try {
                 let user = undefined;
-                if (this.wss.auth && this.wss.auth.authInfos)
+                if (this.wss.auth && this.wss.auth.authInfos && this.wss.auth.authInfos.exists(clientId)) {
                     user = this.wss.auth.authInfos.get(clientId).user as any;
-                const isValid = await options.validation(instance, user, credentials);
+                }
+                const isValid = await options.validate(instance, user, credentials);
                 if (!isValid) { return WSErrorCode.ws_hub_auth_credentials_error; }
             } catch (err) {
                 return WSErrorCode.ws_hub_auth_credentials_error;
