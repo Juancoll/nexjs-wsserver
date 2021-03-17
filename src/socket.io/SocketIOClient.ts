@@ -1,13 +1,14 @@
 import { ISocketClient } from '../base/sockets/ISocketClient';
+import { Socket } from 'socket.io';
 
 export class SocketIOClient implements ISocketClient {
 
     //#region  [ fields ]
-    _ioclient: SocketIO.Socket;
+    _ioclient: Socket;
     //#endregion
 
     //#region [ constructor ]
-    constructor(client: SocketIO.Socket) {
+    constructor(client: Socket) {
         this._ioclient = client;
     }
     //#endregion
@@ -16,7 +17,7 @@ export class SocketIOClient implements ISocketClient {
     get id(): string { return this._ioclient.id; }
     get address(): string { return this._ioclient.handshake.address; }
     get url(): string { return this._ioclient.handshake.url; }
-    get origin(): string { return this._ioclient.handshake.headers.origin; }
+    get origin(): string | string[] | undefined { return this._ioclient.handshake.headers.origin; }
     disconnect(): void {
         this._ioclient.disconnect();
     }

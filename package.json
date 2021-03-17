@@ -1,6 +1,6 @@
 {
     "name": "@nexjs/wsserver",
-    "version": "1.6.0",
+    "version": "2.0.0",
     "description": "socket.io server side rest and hub protocol",
     "main": "./dist/index.js",
     "scripts": {
@@ -15,11 +15,11 @@
     "license": "ISC",
     "dependencies": {
         "reflect-metadata": "^0.1.13",
-        "socket.io": "^2.3.0",
-        "strongly-typed-events": "^1.6.11",
-        "typescript": "^3.8.3"
+        "socket.io": "^4.0.0",
+        "strongly-typed-events": "^1.6.11"
     },
     "devDependencies": {
-        "@types/socket.io": "^2.1.4"
+        "typescript": "^3.8.3",
+        "rimraf": "^3.0.2"
     }
 }

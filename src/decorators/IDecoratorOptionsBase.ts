@@ -1,4 +1,4 @@
-export interface IDecoratorOptionsBase<TInstance = any, TUser = any> {
+export interface IDecoratorOptionsBase {
     service?: string;
     isAuth?: boolean;
     roles?: string[];

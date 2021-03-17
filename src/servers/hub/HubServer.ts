@@ -12,16 +12,23 @@ import { IWSError } from '../../types/IWSError';
 import { WSServer } from '../../WSServer';
 import { ModuleBase } from '../ModuleBase';
 
-import { IHubDecoratorOptions, hubDecoratorKey } from './HubDecorator';
+import { hubDecoratorKey } from './decorators/HubDecorator';
+import { hubDecoratorSelectorKey } from './decorators/HubDecoratorSelector';
+import { hubDecoratorValidatorKey } from './decorators/HubDecoratorValidator';
+import { hubDecoratorValidatorSelectorKey } from './decorators/HubDecoratorValidatorSelector';
+
 import { IHubRequest } from './messages/IHubRequest';
 import { HubServiceCollection } from './types/HubServiceCollection';
 import { IHubEventDescriptor } from './types/IHubEventDescriptor';
 import { HubEventType } from './types/HubEventType';
 import { IHubResponse } from './messages/IHubResponse';
 import { IHubEventMessage } from './messages/IHubEventMessage';
+import { IHubDecoratorValidatorOptions } from './decorators/HubDecoratorValidator';
+import { IHubDecoratorValidatorSelectorOptions } from './decorators/HubDecoratorValidatorSelector';
+import { HubOptionsType } from './types/HubOptionsType';
 
-interface PublishEventArgs { clients: ISocketClient[]; descriptor: IHubEventDescriptor; serverCredentials?: any; data?: any; }
-interface SucribedEventArgs { client: ISocketClient; service: string; event: string; credentials: any; error?: IWSError; }
+interface PublishEventArgs { clients: ISocketClient[]; descriptor: IHubEventDescriptor; selector?: any; data?: any; }
+interface SucribedEventArgs { client: ISocketClient; service: string; event: string; validator: any; error?: IWSError; }
 interface UnsucribedEventArgs { client: ISocketClient; service: string; event: string; error?: IWSError; }
 
 export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
@@ -68,103 +75,178 @@ export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
 
     public register(instance: any): void {
         this.getEventDispatcherProperties(instance).forEach(propertyKey => {
-            const options: IHubDecoratorOptions = Reflect.getMetadata(hubDecoratorKey, instance, propertyKey);
-            if (options) {
 
-                const service = options.service
-                    ? options.service
-                    : Reflection.extractServicePropertyFromInstance(instance);
+            const options: any = this.getMetadata(instance, propertyKey)
 
-                options.isAuth = options.isAuth
-                    ? options.isAuth
-                    : Reflection.extractIsAuthPropertyFromInstance(instance);
+            const service = options.service
+                ? options.service
+                : Reflection.extractServicePropertyFromInstance(instance);
 
-                options.roles = options.roles
-                    ? options.roles
-                    : Reflection.extractRolesPropertyFromInstance(instance);
+            options.isAuth = options.isAuth
+                ? options.isAuth
+                : Reflection.extractIsAuthPropertyFromInstance(instance);
 
-                const event = propertyKey;
+            options.roles = options.roles
+                ? options.roles
+                : Reflection.extractRolesPropertyFromInstance(instance);
 
-                if (this._services.exists(service, event)) {
-                    throw new Error(`service '${service}' already contains event '${event}'`);
-                }
-                const descriptor = { service, event, instance, options, subscriptions: [] } as IHubEventDescriptor;
-                this._services.add(descriptor);
-                this.onRegister.dispatch(descriptor);
+            const event = propertyKey;
 
-                switch (instance[event]._type) {
-                    case HubEventType.HubEvent:
-                        instance[event]
-                            .on(async () => await this.publish(service, event, null, null));
-                        break;
-                    case HubEventType.HubEventSelector:
-                        instance[event]
-                            .on(async (credentials: any) => await this.publish(service, event, null, credentials));
-                        break;
-                    case HubEventType.HubEventData:
-                        instance[event]
-                            .on(async (data: any) => await this.publish(service, event, data, null));
-                        break;
-                    case HubEventType.HubEventSelectorData:
-                        instance[event]
-                            .on(async (credentials: any, data: any) => await this.publish(service, event, data, credentials));
-                        break;
-                }
+            if (this._services.exists(service, event)) {
+                throw new Error(`service '${service}' already contains event '${event}'`);
             }
+            this.checkEventAndDecoratorType(instance[event]._type, options._type)
+
+            const descriptor = { service, event, instance, options, subscriptions: [] } as IHubEventDescriptor;
+
+            switch (instance[event]._type) {
+                case HubEventType.HubEvent:
+                    instance[event].on(async () => await this.publish(service, event, null, null));
+                    break;
+                case HubEventType.HubEventData:
+                    instance[event].on(async (data: any) => await this.publish(service, event, data, null));
+                    break;
+
+                case HubEventType.HubEventSelection:
+                    instance[event].on(async (selector: any) => await this.publish(service, event, null, selector));
+                    break;
+                case HubEventType.HubEventSelectionData:
+                    instance[event].on(async (selector: any, data: any) => await this.publish(service, event, data, selector));
+                    break;
+
+                case HubEventType.HubEventValidation:
+                    instance[event].on(async () => await this.publish(service, event, null, null));
+                    break;
+                case HubEventType.HubEventValidationData:
+                    instance[event].on(async (data: any) => await this.publish(service, event, data, null));
+                    break;
+
+                case HubEventType.HubEventValidationSelection:
+                    instance[event].on(async (selector: any) => await this.publish(service, event, null, selector));
+                    break;
+                case HubEventType.HubEventValidationSelectionData:
+                    instance[event].on(async (selector: any, data: any) => await this.publish(service, event, data, selector));
+                    break;
+            }
+
+            this._services.add(descriptor);
+            this.onRegister.dispatch(descriptor);
         });
     }
     //#endregion
 
     //#region  [ private ]
+    private getMetadata(instance: any, propertyKey: string) {
+        switch (instance[propertyKey]._type) {
+            case HubEventType.HubEvent:
+            case HubEventType.HubEventData:
+                return Reflect.getMetadata(hubDecoratorKey, instance, propertyKey);
+
+            case HubEventType.HubEventSelection:
+            case HubEventType.HubEventSelectionData:
+                return Reflect.getMetadata(hubDecoratorSelectorKey, instance, propertyKey);
+
+            case HubEventType.HubEventValidation:
+            case HubEventType.HubEventValidationData:
+                return Reflect.getMetadata(hubDecoratorValidatorKey, instance, propertyKey);
+
+            case HubEventType.HubEventValidationSelection:
+            case HubEventType.HubEventValidationSelectionData:
+                return Reflect.getMetadata(hubDecoratorValidatorSelectorKey, instance, propertyKey);
+        }
+    }
     private getEventDispatcherProperties(instance: any): string[] {
         const props: string[] = Object.getOwnPropertyNames(instance);
 
         return props.sort().filter((name) => instance[name].constructor && instance[name]._type && (
             instance[name]._type == HubEventType.HubEvent ||
             instance[name]._type == HubEventType.HubEventData ||
-            instance[name]._type == HubEventType.HubEventSelector ||
-            instance[name]._type == HubEventType.HubEventSelectorData
+            instance[name]._type == HubEventType.HubEventSelection ||
+            instance[name]._type == HubEventType.HubEventSelectionData ||
+            instance[name]._type == HubEventType.HubEventValidation ||
+            instance[name]._type == HubEventType.HubEventValidationData ||
+            instance[name]._type == HubEventType.HubEventValidationSelection ||
+            instance[name]._type == HubEventType.HubEventValidationSelectionData
         ));
     }
     private async subscribe(client: ISocketClient, req: IHubRequest) {
         const service = req.service;
         const event = req.eventName;
-        const credentials = req.credentials;
+        const validator = req.validator;
+
 
         if (!this._services.exists(service, event)) {
             const error = {
                 code: WSErrorCode.ws_hub_subscribe_error,
                 message: `service '${service}' or event '${event} not found.`,
             };
-            this.onSuscribed.dispatch({ client, service, event, credentials, error });
+            this.onSuscribed.dispatch({ client, service, event, validator, error });
             throw error;
-        } else {
-            const descriptor = this._services.get(service, event);
-            const code = await this.isValid(
-                client.id,
-                descriptor.instance,
-                descriptor.options,
-                req.credentials,
-            );
-            if (code != WSErrorCode.none) {
-                const error = {
-                    code,
-                    message: `unauthorized`,
-                };
-                this.onSuscribed.dispatch({ client, service, event, credentials, error });
-                throw error;
-            } else {
-                const subscriptions = descriptor.subscriptions;
-                const subscription = subscriptions.find(x => x.socket.id == client.id);
-                if (subscription) {
-                    subscription.credentials = credentials;
-                    this.onSuscribed.dispatch({ client, service, event, credentials });
+        }
+        const descriptor = this._services.get(service, event);
+        const subscriptions = descriptor.subscriptions;
+        const subscription = subscriptions.find(x => x.socket.id == client.id);
 
-                } else {
-                    subscriptions.push({ socket: client, credentials: req.credentials });
-                    this.onSuscribed.dispatch({ client, service, event, credentials });
+        // Auth verification
+        const code = this.isAuth(client.id, descriptor.options)
+        if (code != WSErrorCode.none) {
+            const error = { code, message: `unauthorized` };
+            this.onSuscribed.dispatch({ client, service, event, validator, error });
+            throw error;
+        }
+
+        // Validation verification
+        let user = undefined;
+        if (this.wss.auth && this.wss.auth.authInfos && this.wss.auth.authInfos.exists(client.id)) {
+            user = this.wss.auth.authInfos.get(client.id).user as any;
+        }
+        let validationResult: any;
+        try {
+            switch ((descriptor.options as any)._type) {
+                case HubOptionsType.IHubDecoratorValidator: {
+                    const options = descriptor.options as IHubDecoratorValidatorOptions<any, any, any>
+
+                    const isValid = await options.validate(descriptor.instance, user, validator);
+                    if (!isValid) { throw new Error(); }
+                } break
+
+                case HubOptionsType.IHubDecoratorValidatorSelector: {
+                    const options = descriptor.options as IHubDecoratorValidatorSelectorOptions<any, any, any, any, any>
+                    const result = await options.validate(descriptor.instance, user, validator);
+                    if (typeof result == 'boolean') {
+                        if (result) { validationResult = validator } else { throw new Error() }
+                    } else {
+                        validationResult = result
+                    }
                 }
             }
+        } catch (err) {
+            if (subscription) {
+                this.unusbscribe(subscription.socket, req)
+            }
+            const error = {
+                code: WSErrorCode.ws_hub_auth_credentials_error,
+                message: err.message
+                    ? `unauthorized: ${err.message}`
+                    : 'unauthorized'
+            }
+            this.onSuscribed.dispatch({ client, service, event, validator, error });
+            throw error;
+        }
+
+        // Continue process
+        if (subscription) {
+            subscription.validator = validator;
+            subscription.validationResult = validationResult;
+            this.onSuscribed.dispatch({ client, service, event, validator });
+
+        } else {
+            subscriptions.push({
+                socket: client,
+                validator,
+                validationResult
+            });
+            this.onSuscribed.dispatch({ client, service, event, validator });
         }
     }
     private unusbscribe(client: ISocketClient, req: IHubRequest) {
@@ -188,9 +270,9 @@ export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
             }
         }
     }
-    private async publish(service: string, event: string, data: any, serverCredentials: any) {
+    private async publish(service: string, event: string, data: any, selector: any) {
         const descriptor = this._services.get(service, event);
-        const select = descriptor.options.select;
+        const select = (descriptor.options as any).select;
         const clients = descriptor.subscriptions;
         const selectedClients: ISocketClient[] = [];
 
@@ -201,8 +283,8 @@ export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
                 let user = undefined;
                 if (this.wss.auth && this.wss.auth.authInfos && this.wss.auth.authInfos.exists(client.socket.id))
                     user = this.wss.auth.authInfos.get(client.socket.id).user;
-                const userCredentials = client.credentials;
-                const isValid = await select(descriptor.instance, user, userCredentials, serverCredentials);
+                const validationResult = client.validationResult;
+                const isValid = await select(descriptor.instance, user, validationResult, selector);
                 if (isValid) {
                     selectedClients.push(client.socket);
                 }
@@ -213,7 +295,8 @@ export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
             eventName: event,
             data,
         } as IHubEventMessage));
-        this.onPublish.dispatch({ clients: selectedClients, descriptor, data, serverCredentials });
+
+        this.onPublish.dispatch({ clients: selectedClients, descriptor, data, selector });
     }
     private removeClient(client: ISocketClient) {
         this._services.list().forEach(descriptor => {
@@ -227,12 +310,7 @@ export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
     //#endregion
 
     //#region [ validation ]
-    protected async isValid(
-        clientId: string,
-        instance: any,
-        options: IHubDecoratorOptions,
-        credentials: any,
-    ): Promise<WSErrorCode> {
+    isAuth(clientId: string, options: IDecoratorOptionsBase): WSErrorCode {
         if (options.isAuth) {
             if (!this.wss.auth.authInfos.exists(clientId)) { return WSErrorCode.ws_hub_auth_required; }
             if (options.roles) {
@@ -244,19 +322,31 @@ export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
                 }
             }
         }
-        if (options.validate) {
-            try {
-                let user = undefined;
-                if (this.wss.auth && this.wss.auth.authInfos && this.wss.auth.authInfos.exists(clientId)) {
-                    user = this.wss.auth.authInfos.get(clientId).user as any;
-                }
-                const isValid = await options.validate(instance, user, credentials);
-                if (!isValid) { return WSErrorCode.ws_hub_auth_credentials_error; }
-            } catch (err) {
-                return WSErrorCode.ws_hub_auth_credentials_error;
-            }
+        return WSErrorCode.none
+    }
+
+    checkEventAndDecoratorType(eventType: HubEventType, optionsType: HubOptionsType): void {
+        switch (eventType) {
+            case HubEventType.HubEvent:
+            case HubEventType.HubEventData:
+                if (optionsType != HubOptionsType.IHubDecorator) throw new Error('Invalid Hub Decorator. Require "Hub"')
+                break;
+
+            case HubEventType.HubEventSelection:
+            case HubEventType.HubEventSelectionData:
+                if (optionsType != HubOptionsType.IHubDecoratorSelector) throw new Error('Invalid Hub Decorator. Require "HubSelector"')
+                break;
+
+            case HubEventType.HubEventValidation:
+            case HubEventType.HubEventValidationData:
+                if (optionsType != HubOptionsType.IHubDecoratorValidator) throw new Error('Invalid Hub Decorator. Require "HubValidator"')
+                break;
+
+            case HubEventType.HubEventValidationSelection:
+            case HubEventType.HubEventValidationSelectionData:
+                if (optionsType != HubOptionsType.IHubDecoratorValidatorSelector) throw new Error('Invalid Hub Decorator. Require "HubValidatorSelector')
+                break;
         }
-        return WSErrorCode.none;
     }
     //#endregion
 }

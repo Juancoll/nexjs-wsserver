@@ -1,6 +1,10 @@
 export enum HubEventType {
     'HubEvent' = 'HubEvent',
-    'HubEventSelector' = 'HubEventSelector',
-    'HubEventSelectorData' = 'HubEventSelectorData',
-    'HubEventData' = 'HubEventData'
+    'HubEventData' = 'HubEventData',
+    'HubEventSelection' = 'HubEventSelection',
+    'HubEventSelectionData' = 'HubEventSelectionData',
+    'HubEventValidation' = 'HubEventValidation',
+    'HubEventValidationData' = 'HubEventValidationData',
+    'HubEventValidationSelection' = 'HubEventValidationSelection',
+    'HubEventValidationSelectionData' = 'HubEventValidationSelectionData',
 }

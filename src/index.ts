@@ -17,12 +17,19 @@ export * from './servers/auth/types/IAuthStrategy';
 
 export * from './servers/rest/decorators/RestDecorator';
 export * from './servers/rest/decorators/ParamDecorators';
-export * from './servers/hub/HubDecorator';
+export * from './servers/hub/decorators/HubDecorator';
+export * from './servers/hub/decorators/HubDecoratorSelector';
+export * from './servers/hub/decorators/HubDecoratorValidator';
+export * from './servers/hub/decorators/HubDecoratorValidatorSelector';
 
 export * from './servers/hub/HubServer';
 export * from './servers/hub/events/HubEvent';
-export * from './servers/hub/events/HubEventSelector';
-export * from './servers/hub/events/HubEventSelectorData';
 export * from './servers/hub/events/HubEventData';
+export * from './servers/hub/events/HubEventSelection';
+export * from './servers/hub/events/HubEventSelectionData';
+export * from './servers/hub/events/HubEventValidation';
+export * from './servers/hub/events/HubEventValidationData';
+export * from './servers/hub/events/HubEventValidationSelection';
+export * from './servers/hub/events/HubEventValidationSelectionData';
 
 export * from './servers/rest/RestServer';
