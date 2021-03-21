@@ -52,7 +52,6 @@ export class RestServer<TUser, TToken> extends ModuleBase<TUser, TToken>  {
                 const descriptor = this._services.get(req);
                 const code = await this.isValid(
                     client.id,
-                    descriptor.metadata.target,
                     descriptor.options,
                 );
                 if (code != WSErrorCode.none) {
@@ -176,12 +175,11 @@ export class RestServer<TUser, TToken> extends ModuleBase<TUser, TToken>  {
     //#region [ validation ]
     protected async isValid(
         clientId: string,
-        instance: any,
         options: IDecoratorOptionsBase,
     ): Promise<WSErrorCode> {
         if (options.isAuth) {
             if (!this.wss.auth.authInfos.exists(clientId)) { return WSErrorCode.ws_rest_auth_required; }
-            if (options.roles) {
+            if (options.roles && options.roles.length > 0) {
                 const user = this.wss.auth.authInfos.get(clientId).user as any;
                 if (!user.roles) { return WSErrorCode.ws_rest_auth_invalid_role; }
                 if (!Array.isArray(user.roles)) { return WSErrorCode.ws_rest_auth_invalid_role; }

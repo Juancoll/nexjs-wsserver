@@ -313,7 +313,7 @@ export class HubServer<TUser, TToken> extends ModuleBase<TUser, TToken> {
     isAuth(clientId: string, options: IDecoratorOptionsBase): WSErrorCode {
         if (options.isAuth) {
             if (!this.wss.auth.authInfos.exists(clientId)) { return WSErrorCode.ws_hub_auth_required; }
-            if (options.roles) {
+            if (options.roles && options.roles.length > 0) {
                 const user = this.wss.auth.authInfos.get(clientId).user as any;
                 if (!user.roles) { return WSErrorCode.ws_hub_auth_invalid_role; }
                 if (!Array.isArray(user.roles)) { return WSErrorCode.ws_hub_auth_invalid_role; }
